@@ -7,6 +7,8 @@ import './App.css'
 
 const ICECAST_URL = '/stream'
 
+const createStreamAudio = () => new Audio(`${ICECAST_URL}?t=${Date.now()}`)
+
 function App() {
   const [song, setSong] = useState<Song | null>(null)
   const [position, setPosition] = useState(0)
@@ -14,12 +16,29 @@ function App() {
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const prevSongRef = useRef<string | null>(null)
 
+  const playingRef = useRef(false)
+  const retryRef = useRef<number | null>(null)
+
+  // Icecast рвёт соединение при смене трека (новый source) — слушатель должен
+  // переподключаться сам, пока звук не пойдёт.
+  const connectAudio = () => {
+    if (retryRef.current) clearTimeout(retryRef.current)
+    audioRef.current?.pause()
+    const audio = createStreamAudio()
+    audioRef.current = audio
+    const retry = () => {
+      if (!playingRef.current || audioRef.current !== audio) return
+      retryRef.current = window.setTimeout(connectAudio, 1000)
+    }
+    audio.addEventListener('ended', retry)
+    audio.addEventListener('error', retry)
+    audio.addEventListener('stalled', retry)
+    return audio.play().catch(retry)
+  }
+
   const reconnectAudio = () => {
     if (!audioRef.current) return
-    audioRef.current.pause()
-    const next = new Audio(`${ICECAST_URL}?t=${Date.now()}`)
-    audioRef.current = next
-    next.play().catch(() => {})
+    connectAudio()
   }
 
   useEffect(() => {
@@ -54,11 +73,12 @@ function App() {
 
   const handleClick = async () => {
     if (!playing) {
-      const audio = new Audio(`${ICECAST_URL}?t=${Date.now()}`)
-      audioRef.current = audio
-      await audio.play()
+      playingRef.current = true
+      await connectAudio()
       setPlaying(true)
     } else {
+      playingRef.current = false
+      if (retryRef.current) clearTimeout(retryRef.current)
       audioRef.current?.pause()
       audioRef.current = null
       setPlaying(false)

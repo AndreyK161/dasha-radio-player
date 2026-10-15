@@ -34,3 +34,11 @@ build/
 .vscode/
 src/main/resources/application-local.yaml
 .env
+
+### Python ###
+.venv/
+__pycache__/
+.pytest_cache/
+
+# треки (локальное хранилище backend-py)
+backend-py/songs/
